@@ -27,17 +27,19 @@ class UdpTransport:
             self.sent = self.dropped = 0
 
     def send(self, addr, payload):
+        """Devolve False se a falha simulada descartou o datagrama."""
         with self.lock:
             self.sent += 1
             if random.random() < self.loss:
                 self.dropped += 1
-                return
+                return False
             delay = random.uniform(self.delay_min, self.delay_max) / 1000
         data = json.dumps(payload).encode()
         if delay > 0:
             threading.Timer(delay, self.sock.sendto, (data, addr)).start()
         else:
             self.sock.sendto(data, addr)
+        return True
 
     def _receive_loop(self):
         while True:

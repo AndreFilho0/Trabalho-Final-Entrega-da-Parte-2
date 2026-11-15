@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrucoON Painel</title>
+<style>
+  :root {
+    --bg: #0d1512; --panel: #141f1b; --panel2: #1a2823; --text: #e9efe9; --muted: #93a89e; --line: rgba(255,255,255,.1);
+    --accent: #f2c14e; --ok: #5fcf8a; --warn: #f2c14e; --bad: #ef6461; --ack: #6f7f78;
+  }
+  * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  a { color: var(--accent); }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; min-width: 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  .group { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .group + .group { border-left: 1px solid var(--line); padding-left: 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select { background: #0b120f; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; width: 90px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; background: var(--accent); color: #261c00; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: default; }
+  .banner { font-size: 16px; font-weight: 600; padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; border: 1px solid; }
+  .banner small { display: block; font-weight: 400; font-size: 13px; opacity: .85; margin-top: 2px; }
+  .banner.ok { background: rgba(95,207,138,.1); border-color: rgba(95,207,138,.4); color: var(--ok); }
+  .banner.warn { background: rgba(242,193,78,.1); border-color: rgba(242,193,78,.4); color: var(--warn); }
+  .banner.bad { background: rgba(239,100,97,.1); border-color: rgba(239,100,97,.45); color: var(--bad); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; border-top: 3px solid var(--c); }
+  .card h3 { margin: 0 0 8px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+  .stats { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 13px; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .stats b { font-variant-numeric: tabular-nums; text-align: right; }
+  .hash { font: 12px ui-monospace, Menlo, monospace; padding: 2px 8px; border-radius: 6px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .toolbar label { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+  .toolbar input[type=checkbox] { width: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+  #timeline { width: 100%; display: block; background: var(--panel2); border-radius: 10px; }
+  .two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; }
+  @media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } .group + .group { border-left: 0; padding-left: 0; } }
+  .scroll { overflow: auto; max-height: 460px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; }
+  td.cell { border-left: 3px solid var(--c); }
+  td.err { color: var(--bad); }
+  tr.diverge td { background: rgba(239,100,97,.12); }
+  td.pos { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .feed { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  .feed li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .feed time { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .muted { color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); margin-right: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Truco<span>ON</span> · painel de mensagens</h1>
+    <span class="chip" id="sessionChip">conectando…</span>
+    <a href="/" style="margin-left:auto">← página do jogo</a>
+  </header>
+
+  <section class="panel controls">
+    <div class="group">
+      <label>Ordenação<select id="ordering" style="width:auto"><option value="fifo">fifo (Parte 1b)</option><option value="none">none (UDP cru)</option></select></label>
+      <label>Perda (%)<input id="loss" type="number" min="0" max="90" step="5" value="10"></label>
+      <label>Atraso máx (ms)<input id="delay" type="number" min="0" max="2000" step="10" value="60"></label>
+      <button id="newSession">Nova sessão</button>
+    </div>
+    <div class="group">
+      <label>Mesas<input id="mesas" type="number" min="1" max="20" value="4"></label>
+      <label>Duração (s)<input id="duracao" type="number" min="1" max="120" value="15"></label>
+      <button class="secondary" data-scenario="disputa">Disputa de cadeiras</button>
+      <button class="secondary" data-scenario="partidas">Partidas com bots</button>
+      <span class="muted" id="scenarioStatus"></span>
+    </div>
+  </section>
+
+  <div class="banner ok" id="banner">Carregando…</div>
+  <div class="cards" id="cards"></div>
+
+  <section class="panel">
+    <h2>Linha do tempo das mensagens</h2>
+    <div class="toolbar">
+      <button class="secondary" id="pause">⏸ Pausar</button>
+      <label>Janela <select id="win" style="width:auto"><option value="1000">1 s</option><option value="3000" selected>3 s</option><option value="10000">10 s</option><option value="30000">30 s</option></select></label>
+      <label><input type="checkbox" id="showAcks" checked> ACKs</label>
+      <label><input type="checkbox" id="showApplies" checked> Aplicações</label>
+      <div class="legend">
+        <span><i style="border-color:#4e9af1"></i>comando (cor do remetente)</span>
+        <span><i style="border-color:var(--warn);border-top-style:dashed"></i>retransmissão</span>
+        <span><i style="border-color:var(--ack)"></i>ACK</span>
+        <span style="color:var(--bad)">✕ perdido</span>
+        <span>● <span style="color:var(--warn)">fila de espera</span> / <span style="color:var(--ack)">duplicata</span></span>
+        <span>▮ comando aplicado</span>
+      </div>
+    </div>
+    <svg id="timeline" height="200"></svg>
+    <div class="muted" style="margin-top:6px">Cada linha é um peer. Uma seta vai do envio à recepção do datagrama. Passe o mouse para ver os detalhes.
+      Pause para olhar com calma.</div>
+  </section>
+
+  <div class="two">
+    <section class="panel">
+      <h2>Ordem de aplicação dos comandos em cada réplica</h2>
+      <div class="muted" style="margin-bottom:8px">Mesma posição, comandos diferentes = linha vermelha. Com ordem total (Parte 3) as colunas ficam iguais.</div>
+      <div class="scroll"><table id="order"></table></div>
+    </section>
+    <section class="panel">
+      <h2>Acontecimentos da rede</h2>
+      <div class="scroll"><ul class="feed" id="feed"></ul></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const COLORS = ["#4e9af1", "#f2a541", "#5fcf8a", "#e05d9b", "#a78bfa", "#38c5c5", "#f26b5b", "#c3d65a"];
+const HASH_COLORS = ["#5fcf8a", "#ef6461", "#a78bfa", "#38c5c5", "#f2a541", "#e05d9b"];
+const $ = (id) => document.getElementById(id);
+const color = (p) => COLORS[p % COLORS.length];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clock = (ts) => { const d = new Date(ts); return d.toLocaleTimeString("pt-BR") + "." + String(d.getMilliseconds()).padStart(3, "0"); };
+
+let cursors = {}, msgs = new Map(), applies = [], feed = [], sessionId = null, peers = [];
+let offset = 0, paused = false, frozenNow = 0, state = null;
+
+function reset() { msgs = new Map(); applies = []; feed = []; renderFeed(); }
+function serverNow() { return paused ? frozenNow : Date.now() + offset; }
+
+// --- eventos -------------------------------------------------------------------
+function note(ts, html) { feed.unshift({ ts, html }); if (feed.length > 80) feed.length = 80; }
+
+function ingest(e) {
+  cursors[e.peer] = Math.max(cursors[e.peer] || 0, e.id);
+  if (e.kind === "session") {
+    if (e.session !== sessionId) { sessionId = e.session; reset(); note(e.ts, `Sessão nova: <b>${e.ordering}</b>, perda ${Math.round(e.loss * 100)}%, atraso até ${e.delay_max} ms`); }
+    return;
+  }
+  const P = (p) => `<span style="color:${color(p)}">peer ${p}</span>`;
+  if (e.kind === "send") {
+    const key = `${e.peer}:${e.x}`;
+    msgs.set(key, { ...(msgs.get(key) || {}), send: e, src: e.peer, dst: e.to });
+    const what = e.type === "a" ? `ACK ${e.cum}` : `comando seq ${e.seq ?? "—"}`;
+    if (e.dropped) note(e.ts, `<span style="color:var(--bad)">✕</span> ${P(e.peer)} → ${P(e.to)}: ${what} perdido na rede${e.label ? ` <span class="muted">(${esc(e.label)})</span>` : ""}`);
+    else if (e.retx) note(e.ts, `<span style="color:var(--warn)">↻</span> ${P(e.peer)} retransmite seq ${e.seq} para ${P(e.to)} <span class="muted">(${esc(e.label)})</span>`);
+  } else if (e.kind === "recv") {
+    const key = `${e.from}:${e.x}`;
+    msgs.set(key, { ...(msgs.get(key) || {}), recv: e, src: e.from, dst: e.peer });
+    if (e.status === "espera") note(e.ts, `<span style="color:var(--warn)">●</span> ${P(e.peer)} recebeu seq ${e.seq} de ${P(e.from)} adiantada: vai para a fila de espera`);
+    else if (e.status === "duplicata") note(e.ts, `<span style="color:var(--ack)">●</span> ${P(e.peer)} descartou seq ${e.seq} de ${P(e.from)}: duplicata`);
+    else if (e.status && e.status.includes("da fila")) note(e.ts, `▶ ${P(e.peer)} recebeu seq ${e.seq} de ${P(e.from)} e ${e.status.replace("entregue + ", "liberou ")}`);
+  } else if (e.kind === "apply") {
+    applies.push(e);
+    if (!e.ok) note(e.ts, `${P(e.peer)} aplicou <b>${esc(e.label)}</b> e a regra rejeitou: <span style="color:var(--bad)">${esc(e.result)}</span>`);
+  }
+}
+
+function prune() {
+  const limit = serverNow() - 65000;
+  for (const [k, m] of msgs) if (((m.send || m.recv).ts) < limit) msgs.delete(k);
+  applies = applies.filter((a) => a.ts >= limit);
+}
+
+async function pollEvents() {
+  try {
+    const r = await fetch("/api/painel/eventos?c=" + encodeURIComponent(JSON.stringify(cursors)));
+    const data = await r.json();
+    offset = data.now - Date.now();
+    data.events.sort((a, b) => a.ts - b.ts).forEach(ingest);
+    if (data.events.length) { prune(); renderFeed(); }
+  } catch (e) {}
+  setTimeout(pollEvents, 250);
+}
+
+// --- estado (contadores, ordem) ------------------------------------------------
+async function pollState() {
+  try { state = await (await fetch("/api/painel/estado")).json(); renderState(); } catch (e) {}
+  setTimeout(pollState, 800);
+}
+
+function renderState() {
+  const s = state, p = s.params || {};
+  peers = s.peers.map((x) => x.digest.peer).sort((a, b) => a - b);
+  $("sessionChip").textContent = p.ordering ? `ORDERING=${p.ordering} · perda ${Math.round(p.loss * 100)}% · atraso 0–${p.delay_max} ms · ${peers.length} peers` : "sem sessão";
+  if (!document.activeElement || !["INPUT", "SELECT"].includes(document.activeElement.tagName)) {
+    if (p.ordering) { $("ordering").value = p.ordering; $("loss").value = Math.round(p.loss * 100); $("delay").value = p.delay_max; }
+  }
+  const running = s.scenario && s.scenario.running;
+  document.querySelectorAll("[data-scenario]").forEach((b) => (b.disabled = running));
+  $("scenarioStatus").textContent = running ? `rodando: ${s.scenario.name}…` : s.scenario && s.scenario.name ? `${s.scenario.name}: terminou` : "";
+
+  // faixa de consistência
+  const b = $("banner");
+  const total = Math.max(0, ...s.peers.map((x) => x.digest.applied));
+  if (s.unreachable.length) { b.className = "banner warn"; b.innerHTML = `Peer(s) ${s.unreachable.join(", ")} sem resposta`; }
+  else if (s.same_state && !s.first_divergence) { b.className = "banner ok"; b.innerHTML = `✔ Réplicas idênticas<small>mesma ordem nas ${s.compared} posições que todas já aplicaram${total > s.compared ? ` (${total - s.compared} ainda a caminho)` : ""}</small>`; }
+  else if (s.same_state) { b.className = "banner warn"; b.innerHTML = `Estado igual, mas a ordem difere em ${s.diverging_positions} de ${s.compared} posições<small>os comandos trocados de ordem comutam (ex.: mesas diferentes), então o resultado foi o mesmo</small>`; }
+  else { b.className = "banner bad"; b.innerHTML = `✘ Réplicas divergentes<small>${s.first_divergence ? `primeira posição diferente: ${s.first_divergence} · ${s.diverging_positions} de ${s.compared} posições diferem` : "mesma ordem até agora, mas faltam comandos em alguma réplica"}</small>`; }
+
+  // cartões por peer
+  const hashes = [...new Set(s.peers.map((x) => x.digest.state))];
+  $("cards").innerHTML = s.peers.sort((a, c) => a.digest.peer - c.digest.peer).map((x) => {
+    const d = x.digest, hc = HASH_COLORS[hashes.indexOf(d.state) % HASH_COLORS.length];
+    return `<div class="card" style="--c:${color(d.peer)}">
+      <h3><span><span class="dot"></span>peer ${d.peer}</span><span class="hash" title="hash do estado da réplica" style="background:${hc}22;color:${hc}">${d.state.slice(0, 8)}</span></h3>
+      <div class="stats">
+        <span>comandos aplicados</span><b>${d.applied}</b>
+        <span>comandos enviados</span><b>${d.submitted}</b>
+        <span>datagramas enviados</span><b>${d.sent}</b>
+        <span>perdidos (simulação)</span><b>${d.dropped}</b>
+        <span>retransmissões</span><b>${d.retransmissions}</b>
+        <span>duplicatas descartadas</span><b>${d.duplicates}</b>
+        <span>na fila de espera agora</span><b>${d.held_back}</b>
+        <span>esperando ACK agora</span><b>${d.unacked}</b>
+      </div></div>`;
+  }).join("");
+
+  // ordem de aplicação, alinhada por posição
+  const byPeer = Object.fromEntries(s.peers.map((x) => [x.digest.peer, Object.fromEntries(x.history.map((h) => [h.pos, h]))]));
+  const rows = [];
+  for (let pos = total; pos >= Math.max(1, total - 29); pos--) {
+    const cells = peers.map((p) => byPeer[p][pos]);
+    const ids = new Set(cells.filter(Boolean).map((h) => `${h.origin}:${h.k}`));
+    rows.push(`<tr class="${ids.size > 1 ? "diverge" : ""}"><td class="pos">${pos}</td>${cells.map((h) => h
+      ? `<td class="cell ${h.ok ? "" : "err"}" style="--c:${color(h.origin)}" title="comando ${h.k} do peer ${h.origin}${h.ok ? "" : " · rejeitado: " + esc(h.result)}">${esc(h.label)}${h.ok ? "" : " ✘"}</td>`
+      : `<td class="muted">…</td>`).join("")}</tr>`);
+  }
+  $("order").innerHTML = `<tr><th>#</th>${peers.map((p) => `<th><span class="dot" style="--c:${color(p)}"></span>peer ${p}</th>`).join("")}</tr>` +
+    (rows.join("") || `<tr><td colspan="${peers.length + 1}" class="muted">Nenhum comando ainda. Rode um cenário ou jogue pela página do jogo.</td></tr>`);
+}
+
+function renderFeed() {
+  $("feed").innerHTML = feed.map((f) => `<li><time>${clock(f.ts)}</time>${f.html}</li>`).join("") || `<li class="muted">Perdas, retransmissões, filas de espera e rejeições aparecem aqui.</li>`;
+}
+
+// --- linha do tempo (SVG) ------------------------------------------------------
+const LANE = 64, TOP = 26, LEFT = 74, RIGHT = 14;
+
+function renderTimeline() {
+  const svg = $("timeline"), W = svg.clientWidth || 800, n = Math.max(peers.length, 1);
+  const H = TOP + n * LANE + 8;
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const win = Number($("win").value), now = serverNow(), t0 = now - win, plot = W - LEFT - RIGHT;
+  const X = (t) => LEFT + ((t - t0) / win) * plot;
+  const laneIndex = Object.fromEntries(peers.map((p, i) => [p, i]));
+  const Y = (p) => TOP + (laneIndex[p] ?? 0) * LANE + LANE / 2;
+  const out = [];
+
+  // marcadores (pontas de seta)
+  const markers = [...COLORS.map((c, i) => [`m${i}`, c]), ["mack", "#6f7f78"], ["mretx", "#f2c14e"]];
+  out.push(`<defs>${markers.map(([id, c]) => `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join("")}</defs>`);
+
+  // grade de tempo
+  const step = win <= 1000 ? 100 : win <= 3000 ? 500 : win <= 10000 ? 1000 : 5000;
+  for (let t = Math.ceil(t0 / step) * step; t <= now; t += step) {
+    const x = X(t);
+    out.push(`<line x1="${x}" y1="${TOP - 8}" x2="${x}" y2="${H - 4}" stroke="rgba(255,255,255,.05)"/>`);
+    out.push(`<text x="${x + 3}" y="${TOP - 12}" fill="#6f7f78" font-size="10">${((t - now) / 1000).toFixed(step < 1000 ? 1 : 0)} s</text>`);
+  }
+  // raias
+  peers.forEach((p) => {
+    const y = Y(p);
+    out.push(`<line x1="${LEFT}" y1="${y}" x2="${W - RIGHT}" y2="${y}" stroke="${color(p)}" stroke-opacity=".35" stroke-width="2"/>`);
+    out.push(`<text x="10" y="${y + 4}" fill="${color(p)}" font-size="13" font-weight="600">peer ${p}</text>`);
+  });
+
+  const showAcks = $("showAcks").checked;
+  for (const m of msgs.values()) {
+    const s = m.send, r = m.recv;
+    if (!s && !r) continue;
+    const type = (s || r).type;
+    if (type === "a" && !showAcks) continue;
+    const ts = s ? s.ts : r.ts - 1, te = r ? r.ts : null;
+    if ((te ?? ts) < t0 || ts > now) continue;
+    const x1 = X(ts), y1 = Y(m.src), y2 = Y(m.dst);
+    const isAck = type === "a", retx = s && s.retx;
+    const c = isAck ? "#6f7f78" : retx ? "#f2c14e" : color(m.src);
+    const mk = isAck ? "mack" : retx ? "mretx" : `m${m.src % COLORS.length}`;
+    const w = isAck ? 1 : 1.8, dash = retx ? ` stroke-dasharray="5 3"` : "";
+    const lbl = (s || r).label || "";
+    const title = `<title>${isAck ? `ACK cumulativo ${s?.cum ?? r?.cum}` : `comando seq ${(s || r).seq ?? "—"}${retx ? " (retransmissão)" : ""}: ${esc(lbl)}`}
+peer ${m.src} → peer ${m.dst}
+enviado ${s ? clock(s.ts) : "?"}${r ? `\nrecebido ${clock(r.ts)} (+${Math.round(r.ts - (s ? s.ts : r.ts))} ms) · ${r.status}` : s && s.dropped ? "\nperdido na rede (simulação)" : "\nainda a caminho"}</title>`;
+    if (s && s.dropped) {
+      const x2 = x1 + Math.max(16, (30 / win) * plot), yy = y1 + (y2 - y1) * 0.4;
+      out.push(`<g><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${m.src === m.dst ? y1 - 14 : yy}" stroke="#ef6461" stroke-width="${w}"${dash}/>${title}</g>`);
+      out.push(`<text x="${x2 - 4}" y="${(m.src === m.dst ? y1 - 14 : yy) + 4}" fill="#ef6461" font-size="12" font-weight="700">✕</text>`);
+      continue;
+    }
+    if (!r) {
+      const x2 = Math.min(X(now), x1 + Math.max(10, (40 / win) * plot));
+      out.push(`<g><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y1 + (y2 - y1) * 0.3}" stroke="${c}" stroke-width="${w}" stroke-dasharray="2 3"/>${title}</g>`);
+      continue;
+    }
+    const x2 = X(te);
+    if (m.src === m.dst) {
+      const lift = isAck ? 10 : 18;
+      out.push(`<g><path d="M${x1},${y1} C${x1},${y1 - lift} ${x2},${y1 - lift} ${x2},${y1}" fill="none" stroke="${c}" stroke-width="${w}"${dash} marker-end="url(#${mk})"/>${title}</g>`);
+    } else {
+      out.push(`<g><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${w}"${dash} marker-end="url(#${mk})"/>${title}</g>`);
+    }
+    if (r.status === "espera") out.push(`<circle cx="${x2}" cy="${y2}" r="5" fill="#f2c14e"><title>chegou adiantada: fila de espera</title></circle>`);
+    else if (r.status === "duplicata") out.push(`<circle cx="${x2}" cy="${y2}" r="4" fill="#6f7f78"><title>duplicata descartada</title></circle>`);
+  }
+
+  if ($("showApplies").checked) {
+    for (const a of applies) {
+      if (a.ts < t0 || a.ts > now) continue;
+      const x = X(a.ts), y = Y(a.peer);
+      out.push(`<rect x="${x - 2.5}" y="${y + 6}" width="5" height="14" rx="1" fill="${color(a.origin)}" stroke="${a.ok ? "none" : "#ef6461"}" stroke-width="2"><title>peer ${a.peer} aplicou o comando #${a.pos}: ${esc(a.label)} (do peer ${a.origin})${a.ok ? "" : " · rejeitado: " + esc(a.result)}</title></rect>`);
+    }
+  }
+  svg.innerHTML = out.join("");
+}
+
+function loop() { if (!paused) renderTimeline(); setTimeout(loop, 100); }
+
+// --- controles -----------------------------------------------------------------
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+$("newSession").onclick = async () => {
+  $("newSession").disabled = true;
+  try { await post("/api/painel/sessao", { ordering: $("ordering").value, loss: Number($("loss").value) / 100, delay_max: Number($("delay").value) }); } catch (e) {}
+  $("newSession").disabled = false;
+};
+document.querySelectorAll("[data-scenario]").forEach((b) => (b.onclick = async () => {
+  b.disabled = true;
+  try { await post("/api/painel/cenario", { nome: b.dataset.scenario, mesas: Number($("mesas").value), duracao: Number($("duracao").value) }); } catch (e) {}
+}));
+$("pause").onclick = () => {
+  paused = !paused;
+  if (paused) frozenNow = Date.now() + offset;
+  $("pause").textContent = paused ? "▶ Continuar" : "⏸ Pausar";
+  renderTimeline();
+};
+["win", "showAcks", "showApplies"].forEach((id) => ($(id).onchange = renderTimeline));
+window.addEventListener("resize", renderTimeline);
+
+renderFeed();
+pollState();
+pollEvents();
+loop();
+</script>
+</body>
+</html>

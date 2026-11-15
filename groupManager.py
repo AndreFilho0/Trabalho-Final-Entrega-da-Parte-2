@@ -9,17 +9,29 @@ from constMP import GROUPMNGR_PORT
 class GroupManager(rpyc.Service):
     def __init__(self):
         self.lock = threading.Lock()
-        self.members = {}  # id -> (host, udp_port, ctrl_port)
+        self.members = {}  # id -> (host, udp_port, ctrl_port, web_port)
         self.next_id = 0
         self.server = None
 
-    def exposed_register(self, host, udp_port, ctrl_port):
+    def exposed_register(self, host, udp_port, ctrl_port, web_port=None):
+        addr = (host, udp_port, ctrl_port, web_port)
         with self.lock:
-            peer_id = self.next_id
-            self.next_id += 1
-            self.members[peer_id] = (host, udp_port, ctrl_port)
-        print(f"Peer {peer_id} registrado: {host} udp={udp_port} ctrl={ctrl_port}", flush=True)
+            # Idempotente: um peer que reinicia no mesmo endereço recebe o mesmo id
+            # em vez de aparecer duas vezes na lista.
+            peer_id = next((i for i, a in self.members.items() if a[:2] == addr[:2]), None)
+            if peer_id is None:
+                peer_id = self.next_id
+                self.next_id += 1
+            self.members[peer_id] = addr
+        print(f"Peer {peer_id} registrado: {host} udp={udp_port} ctrl={ctrl_port} web={web_port}", flush=True)
         return peer_id
+
+    def exposed_unregister(self, peer_id):
+        with self.lock:
+            removed = self.members.pop(peer_id, None) is not None
+        if removed:
+            print(f"Peer {peer_id} removido", flush=True)
+        return removed
 
     def exposed_list(self):
         # Tupla é enviada por valor; uma lista viraria referência remota (netref).

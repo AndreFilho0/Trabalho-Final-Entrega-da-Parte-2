@@ -22,8 +22,9 @@ def divergent_positions(logs):
     return [j for j, column in enumerate(zip(*padded)) if len(set(column)) > 1], length
 
 
-def compare(logs, origins, n_msgs):
-    expected = {(o, k) for o in origins for k in range(n_msgs)}
+def compare(logs, expected):
+    """logs: peer -> sequência de (origem, k) entregues; expected: conjunto de (origem, k) enviados."""
+    expected = set(expected)
     per_peer = {}
     for peer, log in sorted(logs.items()):
         received = set(log)

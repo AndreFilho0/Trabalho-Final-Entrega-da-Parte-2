@@ -16,11 +16,12 @@ SERVER_PORT = env("SERVER_PORT", 5678, int)
 # Cada peer usa BASE + índice, para vários peers caberem na mesma máquina.
 PEER_UDP_BASE = env("PEER_UDP_BASE", 6789, int)
 PEER_CTRL_BASE = env("PEER_CTRL_BASE", 5700, int)
+PEER_WEB_BASE = env("PEER_WEB_BASE", 8000, int)  # página do jogo de cada peer
 
 RPC_TIMEOUT = env("RPC_TIMEOUT", 120, float)
 
 # Parâmetros do experimento, lidos só pelo comparisonServer e repassados aos peers.
-ORDERING = env("ORDERING", "fifo")  # none | fifo
+ORDERING = env("ORDERING", "fifo")  # none | fifo  (a Parte 3 acrescenta a ordem total)
 LOSS = env("LOSS", 0.0, float)
 DELAY_MIN = env("DELAY_MIN", 0, float)  # ms
 DELAY_MAX = env("DELAY_MAX", 0, float)  # ms

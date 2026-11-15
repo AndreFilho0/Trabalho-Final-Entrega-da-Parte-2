@@ -1,7 +1,9 @@
-# MPComm — Parte 1: RPC e multicast confiável com ordem FIFO
+# TrucoON — Parte 2: truco online com mesas replicadas
 
 Trabalho final de **Sistemas Distribuídos (INF0344)** — Ciência da Computação, UFG.
 Base: [MPComm](https://github.com/professorfabio/MPComm), do Prof. Fábio M. Costa (cópia intacta em [`original/`](original/)).
+Este repositório continua a [Parte 1](https://github.com/AndreFilho0/Trabalho-Final-Entrega-da-Parte-1)
+(RPC + multicast UDP confiável com ordem FIFO) e dá um **significado** às mensagens e aos processos.
 
 ## Integrantes
 
@@ -12,270 +14,305 @@ Base: [MPComm](https://github.com/professorfabio/MPComm), do Prof. Fábio M. Cos
 
 ## Testar localmente em 3 passos
 
-Precisa só de Python 3.10+.
+Precisa só de Python 3.10+ (sem banco de dados, sem Node, sem Docker).
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 
-scripts/run_local.sh 4 30                  # 4 peers, 30 mensagens cada, multicast confiável FIFO
-ORDERING=none scripts/run_local.sh 4 30    # mesmo experimento com o UDP cru do original
+scripts/run_local.sh 4 disputa 8     # 4 peers, 8 mesas, disputa de cadeiras; compara as réplicas e encerra
+scripts/run_local.sh 3 jogar         # 3 peers no ar para jogar pelo navegador (menu no terminal)
 ```
 
-O script sobe o GroupManager, os peers e o comparisonServer na sua máquina, roda uma rodada, imprime a tabela
-abaixo e encerra tudo. Por padrão ele simula **10% de perda e 0–60 ms de atraso** em cada datagrama
-(mude com `LOSS=0.3 DELAY_MAX=100 scripts/run_local.sh`). A saída de cada processo fica em `logs/`.
+No modo `jogar`, abra **http://localhost:8000**, crie uma mesa e abra o link de convite em outra aba trocando a porta
+(`:8001`, `:8002`): cada porta é um peer diferente, como amigos ligados a servidores em regiões diferentes. O botão
+**⚙ Réplicas** mostra o hash da mesa em cada peer. O **painel de mensagens** fica em
+**http://localhost:8000/painel**: linha do tempo dos datagramas entre os peers, ordem em que cada réplica aplicou os
+comandos e botões para abrir sessões e rodar os cenários (ver [Painel de mensagens](#painel-de-mensagens)).
 
-```
-4 peers x 30 mensagens = 120 esperadas por peer
-peer   entregues   faltando   duplicadas   violações FIFO   retransmissões   datagramas enviados
-   0         120          0            0                0               47                   314
-   ...
-Posições divergentes entre peers: 116 de 120 (primeira: 0)
-```
-
-Outros comandos:
+Por padrão o script simula **10% de perda e 0–60 ms de atraso** por datagrama (`LOSS=0 DELAY_MAX=0` desliga) e usa
+o multicast **FIFO** da Parte 1 (`ORDERING=none` usa o UDP cru do original). Outros comandos:
 
 ```bash
-pytest                                   # testes (inclui rede simulada e UDP real com 30% de perda)
-python bench/rpc_vs_socket.py 1000       # latência socket x RPC
+DURACAO=20 scripts/run_local.sh 4 partidas 4   # 4 partidas 2x2 inteiras jogadas por bots em peers diferentes
+pytest                                          # 36 testes: regras, base replicada, UDP real com perda
 ```
 
-## O que o sistema faz
+## A aplicação
 
-Um grupo de **peers** troca mensagens por multicast: cada peer envia `n` mensagens numeradas para todos (inclusive
-para si mesmo) em intervalos aleatórios e registra a ordem em que recebeu as mensagens. Dois servidores coordenam o
-experimento:
+**TrucoON** é um **truco mineiro online** para partidas privadas, 1x1 ou 2x2. Uma pessoa cria a mesa, manda o link
+para os amigos, cada um escolhe uma cadeira e o anfitrião começa a partida.
 
-- **GroupManager** (`groupManager.py`): registro e descoberta dos peers.
-- **comparisonServer** (`comparisonServer.py`): dá o sinal de início, recebe o log de cada peer e compara.
+Regras implementadas (`truco/`): baralho de 27 cartas com **manilhas fixas** (zap, copas, espadilha, pica-fumo),
+vazas com empate ("cangar"), **truco → seis → nove → doze** com aceitar, aumentar ou fugir, **mão de 11** (o time
+com 11 vê as cartas do parceiro e decide se joga), **mão de ferro** (11 a 11, às cegas) e partida até 12 tentos.
 
-O objetivo do MPComm é mostrar que, sem coordenação, cada peer recebe as mensagens numa ordem diferente. Nesta parte
-melhoramos os protocolos de comunicação:
+<p align="center">
+  <img src="docs/img/inicio.png" width="260" alt="Tela inicial">
+  <img src="docs/img/partida.png" width="260" alt="Partida com truco pedido">
+</p>
 
-- **a)** as interações cliente-servidor passam a ser **RPC** (RPyC) em vez de sockets TCP montados à mão;
-- **b)** o multicast continua em **sockets UDP**, agora com **tratamento de perda** e **ordem FIFO**.
+### Significado dos processos
+
+| Processo | No MPComm original | No TrucoON |
+|---|---|---|
+| **peer** (`peerCommunicator.py`) | envia mensagens numeradas sem sentido | servidor de uma "região": guarda uma **réplica completa da base de mesas** e atende os jogadores ligados a ele (página web) |
+| **GroupManager** (`groupManager.py`) | registro dos peers | igual: registro, descoberta e saída dos peers |
+| **comparisonServer** (`comparisonServer.py`) | dispara a rodada e compara a ordem das mensagens | abre a sessão do jogo, roda cenários com bots e **compara as réplicas** |
+
+### Significado das mensagens
+
+Cada mensagem do multicast é um **comando** que altera a base replicada de mesas (`truco/rooms.py`):
+
+```
+["create",  código, jogador, modo, semente]   criar mesa ("1v1" ou "2v2")
+["join",    código, jogador]                  entrar no lobby
+["seat",    código, jogador, cadeira]         sentar (cadeiras pares = time A, ímpares = time B)
+["start",   código, jogador]                  começar a partida (só o anfitrião)
+["act",     código, jogador, ação]            jogar carta, truco, aceitar, fugir, mão de 11...
+["leave",   código, jogador]                  sair do lobby ou desistir da partida
+["rematch", código, jogador]                  revanche
+```
+
+No datagrama UDP o comando vai como `["cmd", origem, k, comando]`: `(origem, k)` identifica o comando (k = 0, 1, 2…
+por peer), no mesmo formato das mensagens `(processo, número)` do MPComm. Por isso `metrics.py` da Parte 1 continua
+medindo perdas, duplicatas, violações FIFO e posições divergentes, agora sobre os comandos aplicados por cada réplica.
+
+As **consultas** (ver a mesa, as cartas da própria mão) não passam pelo multicast: são lidas da réplica local.
+
+## Por que a ordem das mensagens é crítica
+
+Cada réplica aplica os comandos com `Rooms.apply`, uma função **determinística**: mesmo estado + mesmo comando ⇒
+mesmo resultado, inclusive os erros. Então o estado de uma réplica depende **só da sequência** de comandos que ela
+aplicou (**replicação por máquina de estados**). Se duas réplicas aplicam os mesmos comandos em ordens diferentes,
+elas **divergem**. No truco isso aparece o tempo todo:
+
+1. **Disputa de cadeira.** Bia (peer 1) e Caio (peer 2) tocam na cadeira 1 ao mesmo tempo. A réplica que aplica Bia
+   primeiro dá a cadeira a ela e rejeita Caio (`seat_taken`); a outra faz o contrário. Cada um vê a si mesmo sentado.
+2. **Truco × carta.** Ana joga a carta enquanto Bia pede truco. Numa réplica a carta entra primeiro e o truco
+   depois; na outra o truco entra primeiro e a carta é rejeitada (`truco_pending`). A mesa de uma réplica tem a carta
+   de Ana e a da outra não, e daí em diante vazas e placar seguem caminhos diferentes.
+3. **Resposta ao truco no 2x2.** Os dois parceiros respondem juntos, um "aceito" e outro "fujo": cada réplica aplica
+   primeiro uma resposta diferente, e numa a mão vale 3 enquanto na outra o adversário já marcou 1 tento.
+4. **Efeito antes da causa.** Ana cria a mesa (peer 0) e Bia entra por ela (peer 1). O `join` de Bia só existe porque
+   o `create` chegou ao peer 1, mas o peer 2 pode receber o `join` **antes** do `create` e rejeitá-lo
+   (`room_not_found`): no peer 2 a Bia nunca entrou na mesa. FIFO ordena só mensagens de um mesmo remetente; não
+   garante nem a ordem causal entre remetentes diferentes.
+
+Os casos 1, 2 e a comutatividade são verificados em `tests/test_rooms.py`. A captura abaixo é o caso 1 (e o 4)
+acontecendo de verdade, com 3 peers em FIFO, 10% de perda e até 60 ms de atraso: o mesmo instante visto pela página
+do peer 0 (Ana sentou na cadeira 1) e pela do peer 2 (Caio sentou na cadeira 1; e a mesa tem 3 jogadores, porque o
+`join` de Bia chegou antes do `create`).
+
+<p align="center">
+  <img src="docs/img/divergencia-peer0.png" width="300" alt="Peer 0: Ana na cadeira 1">
+  <img src="docs/img/divergencia-peer2.png" width="300" alt="Peer 2: Caio na cadeira 1">
+</p>
+
+```mermaid
+sequenceDiagram
+    participant B as Bia (peer 1)
+    participant P1 as réplica peer 1
+    participant P2 as réplica peer 2
+    participant C as Caio (peer 2)
+    B->>P1: seat(cadeira 1)
+    C->>P2: seat(cadeira 1)
+    Note over P1,P2: multicast FIFO: cada pedido vai para todos
+    P1->>P1: aplica Bia → ok
+    P2->>P2: aplica Caio → ok
+    P1->>P1: aplica Caio → seat_taken
+    P2->>P2: aplica Bia → seat_taken
+    Note over P1,P2: peer 1: cadeira 1 = Bia · peer 2: cadeira 1 = Caio → réplicas divergentes
+```
+
+**O que FIFO não resolve, e a Parte 3 vai resolver**: para as réplicas ficarem iguais, todas precisam aplicar os
+comandos na **mesma ordem total**, não só na ordem de cada remetente.
 
 ## Arquitetura
 
-```
-                 ┌────────────────────┐        ┌──────────────────────┐
-                 │   GroupManager     │        │  comparisonServer    │
-                 │ register / list /  │        │ start dos peers,     │
-                 │ stop               │        │ submit_log, métricas │
-                 └─────────▲──────────┘        └───▲───────────┬──────┘
-               RPC (RPyC)  │                       │ RPC       │ RPC: start(rodada, n, ordering, falhas)
-          register / list  │         submit_log    │           │
-        ┌──────────────────┴───────────────────────┴───────────▼─────────────┐
-        │  peer 0               peer 1               peer 2          ...      │
-        │  ┌───────────────┐                                                  │
-        │  │ Experiment    │  log de entregas, handshake, fim                 │
-        │  │ Multicast     │  canal confiável FIFO (seq, ACK, retransmissão)  │
-        │  │ UdpTransport  │  socket UDP + injeção de perda/atraso            │
-        │  └───────┬───────┘                                                  │
-        └──────────┼──────────────────────────────────────────────────────────┘
-                   └──── UDP ────► todos os peers (dados e ACKs)
+```mermaid
+flowchart TB
+    subgraph nav["navegadores (jogadores)"]
+        J1["Ana · :8000"]
+        J2["Bia · :8001"]
+        J3["Caio · :8002"]
+    end
+    subgraph peer0["peer 0"]
+        W0["web.py<br/>página + API JSON"] --> R0["Replica<br/>base de mesas"]
+        R0 --> M0["Multicast<br/>canal confiável FIFO"]
+        M0 --> U0["UdpTransport<br/>+ perda/atraso"]
+    end
+    subgraph peer1["peer 1"]
+        W1["web.py"] --> R1["Replica"] --> M1["Multicast"] --> U1["UdpTransport"]
+    end
+    subgraph peer2["peer 2"]
+        W2["web.py"] --> R2["Replica"] --> M2["Multicast"] --> U2["UdpTransport"]
+    end
+    J1 -- HTTP --> W0
+    J2 -- HTTP --> W1
+    J3 -- HTTP --> W2
+    U0 <-->|"UDP: comandos e ACKs"| U1
+    U1 <-->|UDP| U2
+    U0 <-->|UDP| U2
+    GM["GroupManager<br/>register / list / unregister"]
+    CS["comparisonServer<br/>sessão, cenários, comparação"]
+    peer0 & peer1 & peer2 -.->|RPC| GM
+    CS -.->|"RPC: start, submit, view, digest, log, stop"| peer0 & peer1 & peer2
 ```
 
 | Arquivo | Papel |
 |---|---|
-| `constMP.py` | endereços, portas e parâmetros (todos podem vir de variáveis de ambiente) |
-| `rpc.py` | cria servidores e conexões RPyC com a mesma configuração |
-| `groupManager.py` | serviço RPC de membros do grupo |
-| `comparisonServer.py` | serviço RPC que coordena a rodada e imprime as métricas |
-| `peerCommunicator.py` | peer: serviço RPC de controle + rodada de multicast |
-| `multicast.py` | multicast de uma rodada (modo cru ou confiável) e thread de retransmissão |
-| `reliable.py` | canais confiáveis FIFO, sem rede (testável isoladamente) |
-| `udpTransport.py` | socket UDP, JSON e injeção de falhas |
-| `metrics.py` | comparação dos logs (perdas, duplicatas, FIFO, divergência) |
+| `truco/deck.py`, `evaluator.py`, `rules.py` | baralho, força das cartas, quem ganha a vaza e a mão, apostas (funções puras) |
+| `truco/game.py` | a partida como máquina de estados determinística; `view` esconde a mão dos outros |
+| `truco/rooms.py` | **a base replicada**: mesas, lobby, cadeiras, partida; `apply(comando)` |
+| `replica.py` | réplica da base em um peer: envia comandos pelo multicast e aplica o que é entregue |
+| `peerCommunicator.py` | o peer: sessão, réplica, multicast, serviço RPC e servidor web |
+| `web.py`, `static/index.html` | API HTTP sem estado e página do jogo (HTML + JS puro, mobile-first) |
+| `msgtrace.py`, `static/painel.html` | registro do que passa por cada peer e o painel de mensagens |
+| `bot.py` | jogador automático dos cenários |
+| `comparisonServer.py` | abre a sessão, roda os cenários e compara as réplicas |
+| `multicast.py`, `reliable.py`, `udpTransport.py`, `rpc.py`, `metrics.py` | infraestrutura da Parte 1 |
 
-## Parte 1a — de sockets para RPC
+### O caminho de uma jogada
 
-### O que mudou
-
-No original, cada interação cliente-servidor abre um socket TCP, serializa um dicionário com `pickle`, faz
-`send`/`recv` com tamanho fixo de buffer e fecha. Agora cada servidor é um `rpyc.Service` e o cliente chama métodos:
-
-| Interação | Original (socket TCP + pickle) | Agora (RPyC) |
-|---|---|---|
-| registro | `send(pickle.dumps({"op": "register", ...}))` | `conn.root.register(host, udp, ctrl)` → id do peer |
-| lista de peers | `send({"op": "list"})` + `recv(2048)` | `conn.root.list()` |
-| sinal de início | `send((peerNumber, nMsgs))` + `recv(512)` | `conn.root.start(rodada, n, ordering, loss, ...)` |
-| envio do log | `send(pickle.dumps(logList))`, servidor faz `recv(32768)` | `conn.root.submit_log(id, rodada, log, stats)` |
-| parada | `send({"op": "stop"})` | `conn.root.stop()` |
-
-```python
-# antes (peerCommunicatorUDP.py)
-clientSock = socket(AF_INET, SOCK_STREAM)
-clientSock.connect((GROUPMNGR_ADDR, GROUPMNGR_TCP_PORT))
-clientSock.send(pickle.dumps({"op": "list"}))
-PEERS = pickle.loads(clientSock.recv(2048))
-clientSock.close()
-
-# depois (peerCommunicator.py)
-with rpc.connect(GROUPMNGR_ADDR, GROUPMNGR_PORT) as conn:
-    members = conn.root.list()
+```mermaid
+sequenceDiagram
+    participant J as jogador (navegador)
+    participant W as web.py (peer 0)
+    participant R as Replica (peer 0)
+    participant G as multicast FIFO (UDP)
+    participant O as réplicas dos outros peers
+    J->>W: POST /api/cmd {op: "act", action: "truco"}
+    W->>R: submit(["act", mesa, jogador, "truco"])
+    R->>G: ["cmd", 0, k, comando] para todos, inclusive o próprio peer
+    G-->>O: entrega (seq, ACK, retransmissão)
+    G-->>R: entrega
+    R->>R: Rooms.apply → novo estado
+    R-->>W: resultado ["ok", ...] ou ["error", motivo]
+    W-->>J: resultado + visão atualizada da mesa
+    Note over J: as outras páginas veem a mudança no próximo GET /api/room (a cada 0,5 s)
 ```
 
-Detalhes de implementação:
+O ponto central: o peer **não aplica** o comando do próprio jogador na hora. Ele envia o comando ao grupo e **espera
+a entrega pelo multicast**, como qualquer outra réplica, e só então responde ao jogador. Assim toda alteração passa
+pelo protocolo de ordenação, e trocar FIFO por ordem total (Parte 3) não muda nada na aplicação.
 
-- Os serviços expõem **só** métodos `exposed_*` e usam `allow_public_attrs=False`. Não usamos o modo *classic* do
-  RPyC, que deixaria qualquer cliente executar código arbitrário no servidor.
-- **Passagem de parâmetros**: o RPyC copia tipos imutáveis (int, str, tupla) e passa objetos mutáveis (lista, dict)
-  **por referência**, como um proxy remoto (*netref*): cada acesso ao objeto vira outra chamada pela rede. Por isso
-  `list()` devolve uma tupla de tuplas, e o log e as estatísticas vão como tuplas.
-- `sync_request_timeout` limita quanto tempo uma chamada espera; `rpc.connect` tenta de novo por alguns segundos se
-  o servidor ainda não subiu.
-- O `start` só dispara a rodada numa thread e volta na hora; quem termina avisa chamando `submit_log`.
+### Determinismo
 
-### Comparação
+Para "mesma sequência ⇒ mesmo estado" valer, nada fora do comando pode influenciar o resultado:
 
-Medição (`python bench/rpc_vs_socket.py 1000`, mesma máquina, 1000 chamadas de `list()` com 8 peers):
+- **Embaralhamento**: `random.Random(semente)`, com a semente sorteada pelo peer que cria a mesa e enviada **dentro
+  do comando** `create`. Todas as réplicas dão as mesmas cartas. A semente de cada mão é `semente × 1000 + número da mão`.
+- **Sem relógio nem timers** na lógica do jogo: tudo que muda o estado é um comando.
+- **Código da mesa**: sorteado pelo peer de origem e enviado no comando. Se colidir, todas as réplicas rejeitam igual
+  (`code_taken`) e o peer tenta outro.
+- **Erros determinísticos**: o comando é aplicado sobre uma cópia da mesa; se a regra rejeita, a base fica intacta
+  em todas as réplicas, pelo mesmo motivo.
 
-| Transporte | Média (µs) | Mediana (µs) | p99 (µs) |
-|---|---|---|---|
-| Socket TCP + pickle (1 conexão por pedido, como o original) | 91 | 70 | 259 |
-| RPyC (1 conexão por pedido) | 569 | 555 | 769 |
-| RPyC (conexão persistente) | 181 | 173 | 299 |
+### Como as réplicas são comparadas
 
-O RPC ficou mais lento. Ao conectar, o RPyC negocia o protocolo e troca o nome do serviço; em cada chamada ele
-monta um pedido com identificador, serializa com o formato próprio (*brine*) e espera a resposta numa máquina de
-estados. O socket do original só manda bytes e lê bytes. Reaproveitar a conexão tira a maior parte do custo, mas
-ainda fica uma camada a mais. Para o MPComm isso não pesa: são poucas chamadas de controle por rodada, e o tráfego
-pesado (o multicast) continua em UDP.
+Cada réplica expõe por RPC (`digest`) e no painel **⚙ Réplicas**:
 
-**Vantagens do RPC**
+- **aplicados**: quantos comandos já aplicou;
+- **hash da sequência**: hash encadeado `h = sha256(h | origem:k)` dos comandos na ordem aplicada; muda se a ordem mudar;
+- **hash do estado**: sha256 do JSON canônico de toda a base; igual em todas as réplicas ⇔ réplicas idênticas;
+- **hash de cada mesa**, com o resumo de quem está em cada cadeira e o placar.
 
-- **Transparência de acesso**: chamar `conn.root.list()` parece chamar uma função local. Some do código a
-  montagem do pedido, o `op` em string, o tamanho do buffer e o fechamento do socket.
-- **Enquadramento e serialização resolvidos**: o original lê com `recv(2048)` e `recv(32768)`; um log maior que
-  isso chega truncado e o `pickle.loads` falha. Com RPC a mensagem chega inteira, de qualquer tamanho.
-- **Erros voltam para quem chamou**: no original, um `op` desconhecido não recebe resposta e o cliente fica
-  esperando para sempre. No RPyC, método inexistente, exceção no servidor ou timeout viram exceção no cliente.
-- **Interface explícita**: os métodos `exposed_*` são o contrato do serviço; fica fácil ver o que cada servidor
-  oferece.
-- **Mais seguro que o original**: `pickle.loads` sobre dados da rede permite execução de código arbitrário. O
-  RPyC só aceita chamar os métodos expostos.
+A sequência pode diferir com o estado igual quando os comandos trocados de ordem **comutam** (por exemplo, jogadas
+em mesas diferentes). O que importa para a consistência é o hash do estado.
 
-**Desvantagens do RPC**
+## Painel de mensagens
 
-- **Desempenho**: a camada a mais custa latência (tabela acima).
-- **Acoplamento de linguagem**: RPyC só funciona entre programas Python. Um socket com formato definido (ou gRPC,
-  com `.proto`) funciona com qualquer linguagem.
-- **A transparência engana**: a chamada parece local, mas pode falhar por motivos que uma chamada local não tem
-  (rede caída, servidor lento, timeout). O código continua tendo que tratar isso.
-- **Referências remotas escondidas**: passar uma lista "por engano" cria um *netref*, e cada acesso ao item vira
-  uma ida e volta pela rede, sem nada no código que deixe isso visível.
-- **Menos controle**: com socket o programador decide formato, tempo de vida da conexão e o que aceitar; com RPC
-  isso fica dentro da biblioteca, o que dificulta depurar o que realmente passou pela rede.
+`http://<qualquer peer>:8000/painel` mostra ao vivo o que acontece entre todos os peers do grupo. O peer que serve a
+página junta, por RPC, os eventos registrados por cada peer (`msgtrace.py`): cada datagrama enviado e recebido e
+cada comando aplicado na réplica.
 
-**Quando o socket ainda é melhor**: tráfego intenso e de baixa latência (por isso o multicast continua em UDP),
-comunicação entre linguagens diferentes sem um IDL, ou quando é preciso controlar cada byte do protocolo.
+![Painel de mensagens com 3 peers jogando](docs/img/painel.png)
 
-## Parte 1b — perda de mensagens e ordem FIFO no multicast
+- **Controles**: abrir uma **sessão nova** em todos os peers (réplicas vazias) escolhendo a ordenação (`fifo` ou
+  `none`), a perda e o atraso simulados, e rodar os cenários **disputa de cadeiras** e **partidas com bots** sem
+  usar o terminal.
+- **Faixa de consistência**: verde quando as réplicas estão idênticas, amarela quando o estado é igual mas a ordem
+  difere em comandos que comutam, vermelha quando divergem (com a primeira posição diferente).
+- **Cartão de cada peer**: comandos aplicados e enviados, datagramas, perdas simuladas, retransmissões, duplicatas
+  descartadas, mensagens na fila de espera e sem ACK naquele instante, e o hash do estado (mesma cor = mesmo estado).
+- **Linha do tempo**: uma raia por peer; cada seta vai do envio à recepção de um datagrama. Comandos têm a cor do
+  remetente, retransmissões são tracejadas em amarelo, ACKs são finos e cinza, ✕ é um datagrama perdido pela
+  falha simulada, ● amarelo é uma mensagem que chegou adiantada e ficou na fila de espera, ● cinza é duplicata, e
+  ▮ marca o momento em que a réplica aplicou um comando (na cor de quem o enviou). Passar o mouse mostra seq,
+  comando, horários e latência; **Pausar** congela a tela para explicar.
+- **Ordem de aplicação**: os últimos comandos aplicados por cada réplica, alinhados pela posição na sequência.
+  Linha vermelha = naquela posição as réplicas aplicaram comandos diferentes. Com FIFO isso aparece logo; com a ordem
+  total da Parte 3 as colunas devem ficar idênticas.
+- **Acontecimentos da rede**: perdas, retransmissões, mensagens que foram para a fila de espera e saíram dela,
+  duplicatas e comandos que a regra rejeitou numa réplica.
 
-### O problema
+Para ligar envio e recepção, cada datagrama leva um número `x` do remetente (o par remetente + `x` identifica o
+datagrama). Os horários vêm do relógio de cada peer: numa máquina só é o mesmo relógio; em máquinas diferentes a
+diferença entre os relógios entorta as setas, mas não muda as contagens nem a comparação das réplicas.
 
-No original cada peer faz um `sendto` UDP para cada membro e entrega o que chegar, na ordem em que chegar. UDP pode
-**perder**, **duplicar** e **reordenar** datagramas. Até o handshake `READY` e a mensagem de fim `(-1, -1)` podem se
-perder; nesse caso o peer fica parado esperando para sempre.
+## Resultados
 
-### A solução: um canal confiável e FIFO por par de processos
+`scripts/run_local.sh 4 <cenário>`: 4 peers numa máquina. **Disputa**: 8 mesas 2x2, os 4 jogadores de cada mesa em
+peers diferentes pedem as cadeiras ao mesmo tempo. **Partidas**: 4 mesas 2x2 com bots jogando por 20 s.
 
-`reliable.py` implementa, para cada par (remetente → destinatário):
+| Cenário | Rede | `ORDERING` | Comandos | Faltando por réplica | Violações FIFO | Posições divergentes | **Mesas divergentes** |
+|---|---|---|---|---|---|---|---|
+| disputa | 10% perda, 0–60 ms | `none` | 133 | 7 a 17 | 34 a 50 | 126 de 126 | **11 de 11** ¹ |
+| disputa | 10% perda, 0–60 ms | `fifo` | 125 | 0 | 0 | 123 de 125 | **8 de 8** |
+| disputa | sem perda, sem atraso | `fifo` | 112 | 0 | 0 | 8 de 112 | **1 de 8** |
+| partidas | 10% perda, 0–60 ms | `none` | 60 | 4 a 10 | 0 | 55 de 56 | **4 de 4** ² |
+| partidas | 10% perda, 0–60 ms | `fifo` | 262 | 0 | 0 | 203 de 262 | **4 de 4** |
+| partidas | sem perda, sem atraso | `fifo` | 233 | 0 | 0 | 4 de 233 | **1 de 4** |
 
-**No remetente**
-- cada mensagem para aquele destino recebe um número de sequência `seq` (1, 2, 3, …);
-- a mensagem fica em `unacked` até o ACK chegar;
-- a cada 25 ms (`TICK`), o que estiver há mais de 150 ms (`RTO`) sem ACK é **retransmitido**.
+¹ Em `none` o `create` também se perde; o cenário tenta de novo com outro código, por isso há mais de 8 mesas.
+² Em `none` as cadeiras e o `start` se perdem em algumas réplicas e as partidas mal começam.
 
-**No destinatário**
-- guarda `expected`, o próximo número esperado daquela origem;
-- `seq < expected` ou já guardada: **duplicata**, descarta, mas manda o ACK de novo (o ACK anterior pode ter se
-  perdido);
-- `seq > expected`: chegou adiantada, espera na **hold-back queue**;
-- quando chega `expected`, entrega essa e as seguintes que já estavam na fila: **ordem FIFO por remetente**;
-- responde com **ACK cumulativo** `expected - 1` ("recebi tudo até aqui"), então um ACK perdido é coberto pelo
-  próximo.
+O que os números mostram:
 
-```
-remetente                                    destinatário (expected = 1)
-  d(1) ─────────────────────────X  perdido
-  d(2) ─────────────────────────►  hold-back {2}            ◄── ack(0)
-  d(3) ─────────────────────────►  hold-back {2,3}          ◄── ack(0)
-  ... 150 ms sem ACK de 1 ...
-  d(1) retransmitida ───────────►  entrega 1, 2, 3          ◄── ack(3)
-```
+- **Sem a Parte 1b** (`none`), a base nem recebe todos os comandos: cada réplica perde de 5% a 17% deles. Não há
+  jogo possível.
+- **Com FIFO**, nenhuma réplica perde comando e a ordem de cada remetente é respeitada, mas **todas as mesas
+  divergem** quando há atraso de rede, e **mesmo em localhost, sem perda nem atraso**, uma em cada 4 a 8 mesas
+  diverge. Basta dois jogadores agirem quase ao mesmo tempo por peers diferentes.
+- Quando uma partida diverge, ela costuma **travar**: numa réplica é a vez de Ana, na outra é a vez de Bia, e cada
+  bot espera a própria vez segundo a réplica do seu peer.
 
-### Datagramas (JSON, não mais pickle)
+## Outras melhorias no código-base
 
-```
-{"t": "d", "round": r, "src": i, "seq": s, "m": mensagem}   dado do canal confiável
-{"t": "a", "round": r, "src": i, "cum": c}                  ACK cumulativo
-{"t": "r", "round": r, "src": i, "m": mensagem}             UDP cru (ORDERING=none)
-```
+Além das da Parte 1 (RPC, canal confiável FIFO, métricas corretas, fim da espera ativa, portas por peer, sem
+`api.ipify.org`):
 
-- `round` separa as rodadas: um datagrama atrasado da rodada anterior é ignorado, e um da rodada seguinte que chega
-  antes de o peer começar fica guardado até ele começar.
-- O handshake e o fim também vão pelo canal confiável. O peer só envia o log quando recebeu o fim de todos **e**
-  todos os destinatários confirmaram o que ele enviou. Depois disso o socket continua aberto respondendo ACKs, para
-  quem ainda está retransmitindo não ficar sem resposta.
-- Com `ORDERING=none` só as mensagens de dados vão cruas, como no original; handshake e fim continuam confiáveis
-  para o experimento sempre terminar e dar para contar o que se perdeu.
-
-### Injeção de falhas
-
-Para ver o efeito de peers em regiões diferentes numa máquina só, `UdpTransport.send` descarta cada datagrama com
-probabilidade `LOSS` e atrasa entre `DELAY_MIN` e `DELAY_MAX` ms. Atrasos diferentes por datagrama geram
-reordenação, como na Internet. Os valores são definidos no comparisonServer e enviados aos peers no `start`, então
-basta mudar num lugar só.
-
-### Resultados
-
-4 peers × 30 mensagens, 10% de perda, 0–60 ms de atraso (`scripts/run_local.sh 4 30`):
-
-| `ORDERING` | Faltando por peer | Duplicadas | Violações FIFO por peer | Datagramas por peer | Posições divergentes |
-|---|---|---|---|---|---|
-| `none` (original) | 9 a 15 | 0 | 5 a 9 | ~137 | 111 de 111 |
-| `fifo` (Parte 1b) | **0** | **0** | **0** | ~300 | 116 de 120 |
-
-Com 30% de perda e 5 peers todos continuam recebendo as 150 mensagens, sem violação FIFO, em menos de 4 segundos.
-
-O custo é tráfego: cada dado tem um ACK e há retransmissões, então cada peer envia mais que o dobro de datagramas.
-
-**O que FIFO não resolve**: FIFO só ordena mensagens **do mesmo remetente**. Mensagens de remetentes diferentes
-continuam chegando em ordens diferentes em cada peer ("posições divergentes" continua alto). Isso é o que as
-Partes 3 (ordem total) e 4 vão tratar.
-
-## Outros problemas do código-base corrigidos
-
-- `comparisonServer` original: `range(0, N_MSGS-1)` e `range(1, N-1)` deixavam de fora a última posição e o último
-  peer, e só olhava `N_MSGS` posições quando cada peer recebe `N × N_MSGS`. `metrics.py` compara todas as posições e
-  todos os peers, e mede também faltas, duplicatas e violações de FIFO.
-- Espera ativa (`while handShakeCount < N: pass`) trocada por `threading.Condition`.
-- Portas fixas impediam vários peers na mesma máquina; agora cada peer usa porta base + `--index`.
-- `myself` era usado como variável global implícita dentro da thread.
-- Dependência de `api.ipify.org` para descobrir o IP: agora o endereço vem de `HOST`.
+| MPComm original | Agora |
+|---|---|
+| `unregister` era um `# to do` | `exposed_unregister`; o peer sai da lista ao encerrar |
+| Peer que reinicia aparece duas vezes na lista | registro idempotente por (IP, porta UDP) |
+| Mensagens sem significado; toda a lógica num arquivo | camadas separadas: transporte UDP → canal confiável → réplica → regras puras do jogo → web |
+| Lógica de aplicação misturada com rede (impossível testar sem subir processos) | regras e base de mesas são funções puras, testadas sem rede |
+| Resultado só no terminal do servidor | painel de réplicas ao vivo na página e comparação por hash |
+| Sem testes | 36 testes, incluindo réplicas reais trocando comandos por UDP com 20% de perda |
 
 ## Rodar em máquinas diferentes (nuvem)
-
-Como no MPComm, coloque os servidores numa instância e os peers em outras (de preferência em regiões diferentes).
 
 ```bash
 # instância dos servidores (IP 1.2.3.4)
 python groupManager.py
-ORDERING=fifo python comparisonServer.py --wait-peers 6     # pergunta o número de mensagens
+ORDERING=fifo LOSS=0 python comparisonServer.py --wait-peers 3      # menu interativo
 
 # cada instância de peer
-HOST=<ip-publico-deste-peer> GROUPMNGR_ADDR=1.2.3.4 SERVER_ADDR=1.2.3.4 python peerCommunicator.py
+HOST=<ip-publico-deste-peer> GROUPMNGR_ADDR=1.2.3.4 python peerCommunicator.py
 ```
 
-Portas a liberar: 5678 e 5680 (TCP) nos servidores; 5700 (TCP) e 6789 (UDP) nos peers.
+Portas a liberar: 5680 (TCP) no GroupManager; 5700 (TCP, RPC), 6789 (UDP) e 8000 (TCP, página) nos peers. Os
+jogadores abrem `http://<ip-do-peer>:8000`.
 
 ## Roteiro do vídeo
 
-1. Visão geral do MPComm e do que pede a Parte 1.
-2. Parte 1a: mostrar o código antes e depois, rodar `bench/rpc_vs_socket.py` e discutir vantagens e desvantagens.
-3. Parte 1b: `ORDERING=none scripts/run_local.sh 4 30` (perdas e violações FIFO) e depois
-   `scripts/run_local.sh 4 30` (zero perdas e zero violações), explicando seq, ACK cumulativo, retransmissão e
-   hold-back queue.
-4. Mostrar que FIFO não basta para a mesma ordem em todos os peers (gancho para a Parte 3).
+1. O que a Parte 2 pede e a ideia: cada peer é um servidor de uma região com uma réplica das mesas de truco.
+2. Jogar: criar mesa em `:8000`, abrir o convite em `:8001` e `:8002`, sentar, começar, pedir truco, com o
+   `/painel` aberto em outra janela mostrando as setas de cada jogada.
+3. Explicar o caminho de uma jogada: o peer não aplica na hora, manda pelo multicast e espera a entrega.
+4. No painel, **Pausar** e mostrar uma perda (✕), a retransmissão e a mensagem que esperou na fila.
+5. Disputa de cadeiras pelo painel: faixa vermelha, linhas vermelhas na ordem de aplicação, cada jogador sentado
+   na sua réplica (**⚙ Réplicas** na página do jogo).
+6. Nova sessão com `none`: perdas sem retransmissão; volta para `fifo`: nada se perde, mas a divergência continua.
+7. Gancho para a Parte 3: falta uma ordem total.

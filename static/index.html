@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrucoON</title>
+<style>
+  :root {
+    --bg: #0f3d2e; --felt: #14513c; --panel: #0b2e22; --text: #f3f1e8; --muted: #a9c4b6;
+    --accent: #f2c14e; --danger: #e05d5d; --ok: #5fcf8a; --card: #fbf8f0; --red: #c0392b; --ink: #1c1c1c;
+    --line: rgba(255,255,255,.12);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+  h1 span { color: var(--accent); }
+  .tag { white-space: nowrap; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: #082419; color: var(--text); font-size: 16px; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 12px 14px; cursor: pointer; background: var(--accent); color: #2a1f00; font-weight: 600; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.danger { background: var(--danger); color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 0; min-width: 0; }
+  html, body { overflow-x: hidden; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .code { font: 700 26px/1 ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--accent); }
+  .seats { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+  .seat { border: 1px dashed var(--line); border-radius: 12px; padding: 12px; text-align: left; background: transparent; color: var(--text); font-weight: 400; }
+  .seat.taken { border-style: solid; }
+  .seat.mine { border-color: var(--accent); }
+  .seat b { display: block; }
+  .team-a { color: #8fd3ff; } .team-b { color: #ffb38f; }
+  .score { display: flex; justify-content: space-around; text-align: center; }
+  .score div b { display: block; font-size: 34px; }
+  .table { background: var(--felt); border-radius: 18px; min-height: 120px; padding: 14px; display: flex; gap: 10px; justify-content: center; align-items: flex-end; flex-wrap: wrap; }
+  .play { text-align: center; font-size: 12px; color: var(--muted); }
+  .cards { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+  .card { width: 70px; height: 100px; border-radius: 10px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; justify-content: space-between; padding: 6px 8px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  .card.red { color: var(--red); }
+  .card .v { font-size: 22px; } .card .s { font-size: 26px; text-align: right; }
+  .card.manilha { outline: 3px solid var(--accent); }
+  button.card { padding: 6px 8px; }
+  .card.small { width: 52px; height: 74px; } .card.small .v { font-size: 17px; } .card.small .s { font-size: 19px; }
+  .status { text-align: center; margin: 10px 0; font-weight: 600; }
+  .actions { margin-top: 12px; }
+  .feed { scrollbar-color: rgba(255,255,255,.25) transparent; list-style: none; margin: 0; padding: 0; font-size: 14px; color: var(--muted); max-height: 160px; overflow: auto; }
+  .feed li { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--danger); color: #fff; padding: 10px 16px; border-radius: 10px; display: none; max-width: calc(100% - 32px); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--line); }
+  .mono { font-family: ui-monospace, Menlo, monospace; }
+  .good { color: var(--ok); } .bad { color: var(--danger); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Truco<span>ON</span></h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="tag" id="peerTag">conectando…</span>
+      <button class="secondary" id="replicaBtn" style="padding:4px 10px;white-space:nowrap">⚙ Réplicas</button>
+    </div>
+  </header>
+
+  <section class="panel hidden" id="replicas"></section>
+
+  <section id="home" class="hidden">
+    <div class="panel">
+      <label for="name">Seu apelido</label>
+      <input id="name" maxlength="24" placeholder="ex.: Ana" autocomplete="off">
+    </div>
+    <div class="panel">
+      <p class="muted" style="margin-top:0">Crie uma mesa e mande o link para os amigos. Cada aba pode abrir um peer diferente
+        (porta 8000, 8001, …), como jogadores em regiões diferentes.</p>
+      <div class="row">
+        <button data-create="1v1">Criar mesa 1x1</button>
+        <button data-create="2v2">Criar mesa 2x2</button>
+      </div>
+    </div>
+    <div class="panel">
+      <label for="joinCode">Entrar com código</label>
+      <div class="row">
+        <input id="joinCode" placeholder="K7QX-29FA" autocomplete="off" style="flex:2">
+        <button class="secondary" id="joinBtn">Entrar</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="lobby" class="hidden"></section>
+  <section id="game" class="hidden"></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUIT = { ouros: "♦", espadas: "♠", copas: "♥", paus: "♣" };
+const MANILHAS = ["7_ouros", "A_espadas", "7_copas", "4_paus"];
+const BET_NAME = { 3: "Truco", 6: "Seis", 9: "Nove", 12: "Doze" };
+const NEXT_BET = { 1: 3, 3: 6, 6: 9, 9: 12 };
+const ERRORS = {
+  seat_taken: "Essa cadeira já foi ocupada.", not_your_turn: "Não é a sua vez.", truco_pending: "Há um pedido de truco esperando resposta.",
+  room_full: "A mesa está cheia.", room_not_found: "Mesa não encontrada neste peer.", game_in_progress: "A partida já começou.",
+  seats_not_filled: "Todas as cadeiras precisam estar ocupadas.", not_host: "Só o anfitrião pode fazer isso.",
+  same_team_cannot_raise: "Seu time já pediu; espere o adversário.", not_pending_team: "Quem responde é o outro time.",
+  mao_de_11_pending: "O time com 11 ainda não decidiu se joga.", truco_disabled_in_special_round: "Não se pede truco nesta mão.",
+  timeout: "O comando não voltou pelo multicast (perdido?).", no_session: "O peer ainda não abriu a sessão.",
+  card_not_in_hand: "Essa carta não está na sua mão.", max_bet_reached: "A aposta já está no máximo.",
+};
+
+const $ = (id) => document.getElementById(id);
+let me = load(), code = null, view = null, info = null, busy = false, showReplicas = false;
+
+function load() {
+  try { const v = JSON.parse(sessionStorage.getItem("truco-me")); if (v && v.id) return v; } catch (e) {}
+  const id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)).slice(0, 12);
+  return { id, name: "" };
+}
+function save() { try { sessionStorage.setItem("truco-me", JSON.stringify(me)); } catch (e) {} }
+function fmtCode(c) { return c && c.length === 8 ? c.slice(0, 4) + "-" + c.slice(4) : c; }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = "none"), 2600); }
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  return r.json();
+}
+
+async function cmd(op, extra = {}) {
+  if (busy) return;
+  if (!me.name.trim()) { toast("Escolha um apelido primeiro."); return; }
+  busy = true;
+  try {
+    const res = await api("/api/cmd", { op, player: me, code, ...extra });
+    if (res.result[0] === "error") toast(ERRORS[res.result[1]] || res.result[1]);
+    if (op === "create" && res.result[0] === "ok") { code = res.code; history.pushState(null, "", "/m/" + fmtCode(code)); }
+    if (res.view) { view = res.view; render(); }
+  } catch (e) { toast("Falha ao falar com o peer."); }
+  busy = false;
+}
+
+function cardHtml(c, opts = {}) {
+  const [v, s] = c.split("_");
+  const red = s === "ouros" || s === "copas";
+  const cls = `card ${red ? "red" : ""} ${MANILHAS.includes(c) ? "manilha" : ""} ${opts.small ? "small" : ""}`;
+  const inner = `<span class="v">${v}</span><span class="s">${SUIT[s]}</span>`;
+  return opts.button ? `<button class="${cls}" data-card="${c}" ${opts.disabled ? "disabled" : ""}>${inner}</button>` : `<div class="${cls}">${inner}</div>`;
+}
+
+function nameOf(pid) {
+  const p = (view.game?.players || []).find((x) => x.id === pid) || view.members.find((x) => x.id === pid);
+  return p ? (pid === me.id ? "Você" : p.name) : "?";
+}
+function teamLabel(t) { return t === view.me.team ? "seu time" : "adversários"; }
+
+function eventText(e) {
+  switch (e.type) {
+    case "room_created": return `${nameOf(e.player_id)} criou a mesa`;
+    case "player_joined": return `${esc(e.name)} entrou`;
+    case "seat_taken": return `${nameOf(e.player_id)} sentou na cadeira ${e.seat + 1} (time ${e.team.toUpperCase()})`;
+    case "player_left": return `${nameOf(e.player_id)} saiu`;
+    case "game_started": return "Partida começou";
+    case "round_started": return `Mão ${e.number}${e.category !== "normal" ? " — " + e.category.replaceAll("_", " ") : ""}`;
+    case "card_played": return `${nameOf(e.player_id)} jogou ${e.card.replace("_", " de ")}`;
+    case "trick_finished": return e.winner_team ? `Vaza ${e.number}: ${nameOf(e.winner_player_id)} fez` : `Vaza ${e.number} cangou (empate)`;
+    case "truco_called": case "truco_raised": return `${nameOf(e.player_id)} pediu ${BET_NAME[e.current_bet]}!`;
+    case "truco_accepted": return `${nameOf(e.player_id)} aceitou (vale ${e.current_bet})`;
+    case "truco_rejected": return `${nameOf(e.player_id)} fugiu: +${e.tentos} para o time ${e.awarded_to.toUpperCase()}`;
+    case "mao_de_11_accepted": return `${nameOf(e.player_id)} topou jogar a mão de 11`;
+    case "mao_de_11_rejected": return `${nameOf(e.player_id)} correu da mão de 11`;
+    case "round_finished": return e.winner_team ? `Time ${e.winner_team.toUpperCase()} levou ${e.tentos} (${e.scores.a} x ${e.scores.b})` : "Mão empatada, ninguém pontua";
+    case "game_over": return `Fim de jogo: time ${e.winner_team.toUpperCase()} venceu${e.reason === "forfeit" ? " (desistência)" : ""}`;
+    default: return e.type;
+  }
+}
+
+function render() {
+  $("home").classList.toggle("hidden", !!view);
+  $("lobby").classList.toggle("hidden", !view || view.status !== "lobby");
+  $("game").classList.toggle("hidden", !view || view.status === "lobby");
+  if (!view) { $("name").value = me.name; return; }
+  if (view.status === "lobby") renderLobby(); else renderGame();
+}
+
+function renderLobby() {
+  const link = location.origin + "/m/" + fmtCode(view.code);
+  const inRoom = view.members.some((m) => m.id === me.id);
+  $("lobby").innerHTML = `
+    <div class="panel">
+      <div class="muted">Mesa ${view.mode === "1v1" ? "1x1" : "2x2"} · convite</div>
+      <div class="code">${fmtCode(view.code)}</div>
+      <div class="row" style="margin-top:10px"><input readonly value="${link}" id="link"><button class="secondary" id="copy" style="flex:0 0 auto">Copiar</button></div>
+    </div>
+    <div class="panel">
+      <div class="muted">${view.members.length} de ${view.capacity} jogadores · toque numa cadeira para sentar</div>
+      <div class="seats">${view.seats.map((s) => `
+        <button class="seat ${s.player ? "taken" : ""} ${s.player?.id === me.id ? "mine" : ""}" data-seat="${s.seat}" ${!inRoom ? "disabled" : ""}>
+          <span class="team-${s.team}">Cadeira ${s.seat + 1} · time ${s.team.toUpperCase()}</span>
+          <b>${s.player ? esc(s.player.id === me.id ? "Você" : s.player.name) : "livre"}</b>
+        </button>`).join("")}</div>
+      ${!inRoom ? `<label for="lobbyName" style="margin-top:12px">Seu apelido</label><input id="lobbyName" maxlength="24" value="${esc(me.name)}" placeholder="ex.: Ana">` : ""}
+      <div class="row" style="margin-top:12px">
+        ${!inRoom ? `<button id="joinRoom">Entrar na mesa</button>` : ""}
+        ${view.is_host ? `<button id="start">Começar partida</button>` : inRoom ? `<span class="muted">Esperando o anfitrião começar…</span>` : ""}
+        ${inRoom ? `<button class="secondary" id="leave">Sair</button>` : ""}
+      </div>
+    </div>
+    ${feedHtml()}`;
+  $("copy").onclick = () => { navigator.clipboard?.writeText(link); toast("Link copiado"); };
+  document.querySelectorAll("[data-seat]").forEach((b) => (b.onclick = () => cmd("seat", { seat: Number(b.dataset.seat) })));
+  $("lobbyName") && ($("lobbyName").oninput = (e) => { me.name = e.target.value.slice(0, 24); save(); });
+  $("joinRoom") && ($("joinRoom").onclick = () => cmd("join"));
+  $("start") && ($("start").onclick = () => cmd("start"));
+  $("leave") && ($("leave").onclick = () => cmd("leave").then(leaveRoom));
+}
+
+function feedHtml() {
+  return `<div class="panel"><div class="muted" style="margin-bottom:6px">Acontecimentos (versão ${view.version} da mesa)</div>
+    <ul class="feed">${view.events.slice().reverse().map((e) => `<li>${eventText(e)}</li>`).join("")}</ul></div>`;
+}
+
+function renderGame() {
+  const g = view.game, r = g.round, myTeam = view.me.team;
+  const scoreA = g.scores.a, scoreB = g.scores.b;
+  let status = "", actions = "";
+  if (g.status === "finished") {
+    status = g.winner_team === myTeam ? "🏆 Seu time venceu!" : myTeam ? "Seu time perdeu." : `Time ${g.winner_team.toUpperCase()} venceu.`;
+    actions = view.is_host ? `<button id="rematch">Revanche</button>` : `<span class="muted">O anfitrião pode pedir revanche.</span>`;
+  } else if (r) {
+    const myTurn = r.current_turn === me.id;
+    if (r.status === "mao_de_11") {
+      const team11 = r.category.slice(-1);
+      status = `Mão de 11 do time ${team11.toUpperCase()}: ${team11 === myTeam ? "joga ou corre?" : "esperando a decisão"}`;
+      if (team11 === myTeam) actions = `<button data-act="accept_mao_de_11">Jogar (vale 3)</button><button class="danger" data-act="reject_mao_de_11">Correr (+1 p/ eles)</button>`;
+    } else if (r.bet_pending_team) {
+      const asked = BET_NAME[r.current_bet];
+      if (r.bet_pending_team === myTeam) {
+        status = `Pediram ${asked}! O que você faz?`;
+        actions = `<button data-act="accept">Aceitar</button>${NEXT_BET[r.current_bet] ? `<button class="secondary" data-act="truco">${BET_NAME[NEXT_BET[r.current_bet]]}!</button>` : ""}<button class="danger" data-act="reject">Fugir</button>`;
+      } else status = `Vocês pediram ${asked}. Esperando resposta…`;
+    } else {
+      status = myTurn ? "Sua vez" : `Vez de ${nameOf(r.current_turn)}`;
+      const canTruco = r.category === "normal" && r.last_caller_team !== myTeam && NEXT_BET[r.current_bet];
+      if (myTeam && canTruco) actions = `<button class="secondary" data-act="truco">Pedir ${BET_NAME[NEXT_BET[r.current_bet]]}</button>`;
+    }
+  }
+  const canPlay = r && r.current_turn === me.id && !r.bet_pending_team && r.status !== "mao_de_11";
+  $("game").innerHTML = `
+    <div class="panel score">
+      <div class="team-a">Time A ${myTeam === "a" ? "(você)" : ""}<b>${scoreA}</b></div>
+      <div class="muted" style="align-self:center">${r ? `Mão ${r.number}<br>vale ${r.current_bet}` : "até 12"}</div>
+      <div class="team-b">Time B ${myTeam === "b" ? "(você)" : ""}<b>${scoreB}</b></div>
+    </div>
+    ${r ? `<div class="muted" style="text-align:center">Vazas: ${r.trick_results.map((t) => (t === "draw" ? "empate" : t.toUpperCase())).join(" · ") || "—"}${r.category !== "normal" ? " · " + r.category.replaceAll("_", " ") : ""}</div>` : ""}
+    <div class="table" style="margin-top:8px">
+      ${r && r.plays_in_trick.length ? r.plays_in_trick.map((p) => `<div class="play">${cardHtml(p.card, { small: true })}${esc(nameOf(p.player_id))}</div>`).join("")
+        : `<span class="muted">${g.last_trick ? "Última vaza: " + g.last_trick.plays.map((p) => esc(nameOf(p.player_id)) + " " + p.card.replace("_", " de ")).join(", ") : "Mesa vazia"}</span>`}
+    </div>
+    <div class="status">${status}</div>
+    ${r && r.my_cards.length ? `<div class="cards">${r.my_cards.map((c) => cardHtml(c, { button: true, disabled: !canPlay })).join("")}</div>` : ""}
+    ${r && r.partner_cards ? `<div class="muted" style="text-align:center;margin-top:8px">Cartas do parceiro</div><div class="cards">${r.partner_cards.map((c) => cardHtml(c, { small: true })).join("")}</div>` : ""}
+    <div class="row actions">${actions}</div>
+    <div class="row actions"><button class="secondary" id="leave">${g.status === "finished" ? "Sair da mesa" : "Desistir"}</button></div>
+    ${feedHtml()}`;
+  document.querySelectorAll("[data-card]").forEach((b) => (b.onclick = () => cmd("act", { action: ["play_card", b.dataset.card] })));
+  document.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => cmd("act", { action: b.dataset.act })));
+  $("rematch") && ($("rematch").onclick = () => cmd("rematch"));
+  $("leave").onclick = () => { if (g.status === "finished" || confirm("Desistir da partida?")) cmd("leave").then(leaveRoom); };
+}
+
+function leaveRoom() { code = null; view = null; history.pushState(null, "", "/"); render(); }
+
+async function poll() {
+  if (code) {
+    try {
+      const v = await api(`/api/room/${code}?player=${encodeURIComponent(me.id)}`);
+      if (!v.error && (!view || v.version !== view.version || v.code !== view.code)) { view = v; render(); }
+      if (v.error && !view) $("peerTag").textContent = "mesa ainda não chegou neste peer…";
+    } catch (e) {}
+  }
+  setTimeout(poll, 500);
+}
+
+async function pollReplicas() {
+  if (showReplicas) {
+    try {
+      const ds = await api("/api/replicas");
+      const ok = ds.filter((d) => !d.error);
+      const same = (k) => new Set(ok.map(k)).size <= 1;
+      const roomHash = (d) => (code && d.rooms[code] ? d.rooms[code].hash : "—");
+      const seats = (d) => (code && d.rooms[code] ? Object.entries(d.rooms[code].seats).map(([s, p]) => `${Number(s) + 1}:${p.slice(0, 4)}`).join(" ") : "");
+      $("replicas").innerHTML = `
+        <div class="muted" style="margin-bottom:8px">Cada peer guarda uma réplica. Hash igual em todos = réplicas iguais.</div>
+        <table><tr><th>peer</th><th>aplicados</th><th>sequência</th><th>estado</th>${code ? "<th>esta mesa</th>" : ""}</tr>
+        ${ds.map((d) => d.error ? `<tr><td>${d.peer}</td><td colspan="4" class="bad">${d.error}</td></tr>` :
+          `<tr><td>${d.peer}</td><td>${d.applied}</td><td class="mono">${d.chain.slice(0, 8)}</td><td class="mono">${d.state.slice(0, 8)}</td>${code ? `<td class="mono">${roomHash(d).slice(0, 8)} <span class="muted">${seats(d)}</span></td>` : ""}</tr>`).join("")}
+        </table>
+        <div style="margin-top:8px" class="${same((d) => d.state) ? "good" : "bad"}">${same((d) => d.state) ? "✔ réplicas idênticas" : "✘ réplicas divergentes"}${code ? ` · esta mesa: <span class="${same(roomHash) ? "good" : "bad"}">${same(roomHash) ? "igual" : "diverge"}</span>` : ""}</div>`;
+    } catch (e) {}
+  }
+  setTimeout(pollReplicas, 1500);
+}
+
+$("name").oninput = (e) => { me.name = e.target.value.slice(0, 24); save(); };
+document.querySelectorAll("[data-create]").forEach((b) => (b.onclick = () => cmd("create", { mode: b.dataset.create })));
+$("joinBtn").onclick = () => {
+  code = $("joinCode").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  history.pushState(null, "", "/m/" + fmtCode(code));
+  cmd("join");
+};
+$("replicaBtn").onclick = () => { showReplicas = !showReplicas; $("replicas").classList.toggle("hidden", !showReplicas); };
+
+(async function init() {
+  const m = location.pathname.match(/^\/m\/([A-Za-z0-9-]+)/);
+  if (m) { code = m[1].toUpperCase().replace(/[^A-Z0-9]/g, ""); $("joinCode").value = fmtCode(code); }
+  if (location.hash === "#replicas") { showReplicas = true; $("replicas").classList.remove("hidden"); }
+  try {
+    info = await api("/api/info");
+    $("peerTag").textContent = `peer ${info.peer} · ${info.ordering || "sem sessão"}`;
+  } catch (e) {}
+  render();
+  poll();
+  pollReplicas();
+})();
+</script>
+</body>
+</html>

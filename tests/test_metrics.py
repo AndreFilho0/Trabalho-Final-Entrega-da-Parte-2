@@ -16,7 +16,7 @@ def test_divergencia_no_ultimo_peer_e_na_ultima_posicao_e_detectada():
 
 def test_compare_conta_faltas_e_duplicatas():
     logs = {0: [(0, 0), (0, 1), (1, 0), (1, 1)], 1: [(0, 0), (0, 0), (1, 1)]}
-    result = compare(logs, origins=[0, 1], n_msgs=2)
+    result = compare(logs, expected={(o, k) for o in (0, 1) for k in range(2)})
     assert result["per_peer"][0]["faltando"] == 0
     assert result["per_peer"][1]["faltando"] == 2
     assert result["per_peer"][1]["duplicadas"] == 1
