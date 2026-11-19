@@ -1,5 +1,6 @@
 import argparse
 import json
+import signal
 import threading
 import time
 
@@ -27,6 +28,7 @@ class Peer(rpyc.Service):
         self.ctrl_port = PEER_CTRL_BASE + index
         self.web_port = PEER_WEB_BASE + index
         self.id = None
+        self._left = False   # já saiu do grupo
         self.server = None
         self.lock = threading.Lock()
         self.session = None   # Multicast da sessão atual
@@ -48,6 +50,9 @@ class Peer(rpyc.Service):
         print(f"Registrado no GroupManager com id {self.id}", flush=True)
 
     def unregister(self):
+        if self.id is None or self._left:
+            return  # nunca registrou ou já saiu (exposed_stop e o finally do main)
+        self._left = True
         try:
             with rpc.connect(GROUPMNGR_ADDR, GROUPMNGR_PORT, retry_for=1) as conn:
                 conn.root.unregister(self.id)
@@ -238,7 +243,13 @@ def main():
     WebServer(peer, peer.web_port).start()
     print(f"Página do jogo em http://{HOST}:{peer.web_port}", flush=True)
     print("Aguardando o início da sessão...", flush=True)
-    server.start()
+    # kill (SIGTERM) vira Ctrl+C; o rpyc trata os dois e start() retorna, então o
+    # peer sai da lista do GroupManager mesmo sem passar pelo exposed_stop.
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    try:
+        server.start()
+    finally:
+        peer.unregister()
 
 
 if __name__ == "__main__":
